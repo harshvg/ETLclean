@@ -1,5 +1,7 @@
 import org.scalatest.FunSuite
 
+import scala.collection.mutable
+
 class Query3ETLTest extends FunSuite{
 
   test("Query3ETL.Censor"){
@@ -17,6 +19,8 @@ class Query3ETLTest extends FunSuite{
     assert(Query3ETL.calImpactSccore("I hate uuuuioiu harsha",1,1,1)===9)
     assert(Query3ETL.calImpactSccore("I I I I",2,20,30)===0)
 
+    //test Topic words map
+    assert(Query3ETL.generateTopicWords("harsha is harsha abcf hero")=== new mutable.HashMap(("harsha",1)))
 
 
   }

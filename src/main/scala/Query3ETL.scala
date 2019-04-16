@@ -3,9 +3,11 @@ import java.util.Locale
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import java.util.Locale
-import java.sql.Timestamp
-import scala.collection.mutable.HashMap
 
+import org.json4s.jackson.Serialization
+import java.sql.Timestamp
+
+import scala.collection.mutable.HashMap
 import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
@@ -14,6 +16,8 @@ import org.apache.spark.sql.expressions.{UserDefinedFunction, Window}
 import org.apache.spark.sql.types.{DataTypes, LongType}
 import org.apache.spark.sql.functions.struct
 import java.sql.Timestamp
+
+import org.json4s.NoTypeHints
 
 import scala.collection.mutable.ListBuffer
 
@@ -67,21 +71,18 @@ object Query3ETL extends App {
    *
    */
 
-  def generateTopicWords(tweet : String) :Unit={
+  def generateTopicWords(tweet : String) :HashMap[String,Int]={
     var freqMap: HashMap[String, Int] = HashMap()
 
     val validWords =getValidWords(tweet)
     validWords.foreach(x=> {
-
-      if(freqMap.contains(x)){
-        freqMap.put(x,freqMap.getOrElseUpdate(x,+1))
-      }else{
-
-      }
+      freqMap.put(x,freqMap.getOrElse(x, 0)+1)
+    })
+    for(x<-freqMap){
+      println(x._2)
     }
-
+    freqMap
   }
-
 
   def getValidWords(tweet: String) : ListBuffer[String]={
     val words = getSubwords(tweet)
@@ -103,6 +104,7 @@ object Query3ETL extends App {
     false
   }
 */
+
   /*
    * @brief returns list of strings that are considered valid words
    *
