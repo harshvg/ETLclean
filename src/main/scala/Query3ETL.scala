@@ -1,36 +1,26 @@
 import java.util.Locale
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
-import java.util.Locale
-
-import org.json4s.jackson.Serialization
-import java.sql.Timestamp
-
-import scala.collection.mutable.HashMap
-import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
-import org.apache.spark.{SparkConf, SparkContext}
+import net.liftweb.json._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.functions.{broadcast, max, row_number}
-import org.apache.spark.sql.expressions.{UserDefinedFunction, Window}
-import org.apache.spark.sql.types.{DataTypes, LongType}
-import org.apache.spark.sql.functions.struct
-import java.sql.Timestamp
+import org.apache.spark.{SparkConf, SparkContext}
 
-import org.json4s.NoTypeHints
-
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 object Query3ETL extends App {
 
-  def old(args: Array[String]): Unit = {
+   def old(args: Array[String]): Unit = {
     /********** Context **********/
+
     val conf = new SparkConf()
-    conf.setMaster("local")
-    conf.setAppName("Word Count")
-    val spark = SparkSession.builder().getOrCreate()
-    val sqlContext = new org.apache.spark.sql.SQLContext(spark.sparkContext)
+     conf.setMaster("local")
+     conf.setAppName("Word Count")
+     val sc = new SparkContext(conf)
+     sc.setLogLevel("ERROR")
+
+     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
     /*****************************/
+
+
 
     /*********** Imports **********/
 
@@ -44,20 +34,23 @@ object Query3ETL extends App {
 
     import sqlContext.implicits._
     // check if an array contains a given word
-
-    val retweets = Seq(
-      (1, "Hello Harsha,how are you doing today", 2, 2,5, "T,one",12345),
-      (2, "Hey vardhan,what the fuck man,where have you been?", 3, 3, 6,"T two",6789),
-      (3, "It is so cool out here", 4, 6,7, "T three",10111213),
-      (4, "This place is full of niggers and mexicans", 5, 8,9,14151617)
-    ).toDF("tid", "tweet", "fav_cnt", "fl_cnt","rt_cnt", "ts")
+    val z = List("en")
 
 
+     val readd = sqlContext.read.json("/Users/harsha/Desktop/part-r-00000.gz")
+     val reviewFiltered = readd.filter($"lang" isin (z: _*)).filter($"id_str".isNotNull).filter($"id".isNotNull).filter($"user.id_str".isNotNull).filter($"user.id".isNotNull).filter(($"text" =!= "") or $"text".isNotNull).filter(($"created_at" =!= "") or $"created_at".isNotNull).dropDuplicates("id")
 
+     val relevantDF = reviewFiltered.select($"favorite_count".alias("fav_cnt"),$"id",$"created_at".alias("ts"),$"user.followers_count".alias("fl_cnt"),$"retweet_count".alias("rt_cnt"),$"text".alias("tweet"))
+     val retweetsTs = relevantDF.withColumn("ts2",to_timestamp($"ts","EEE MMM dd HH:mm:ss ZZZZZ yyyy")).withColumn("epochtime",unix_timestamp($"ts2","EEE MMM dd HH:mm:ss ZZZZZ yyyy")).drop("ts2","ts")
+     def censorUDF = udf(censorData _)
+     def impactUDF = udf(calImpactSccore _)
+     def topicUDF  = udf(generateTopicWords _)
 
-
-
-
+     val scoresDf = retweetsTs.withColumn("censored",censorUDF($"tweet"))
+       .withColumn("imapctscore",impactUDF($"tweet",$"fav_cnt",$"fl_cnt",$"rt_cnt"))
+       .withColumn("freqmap",to_json(topicUDF($"tweet")))
+     scoresDf.write.parquet("/Users/harsha/Desktop/ETLclean/data/test.pq")
+      sc.stop()
   }
 
   /*
@@ -71,6 +64,41 @@ object Query3ETL extends App {
    *
    */
 
+
+  def compareAgaistRef():Boolean={
+
+    val conf = new SparkConf()
+    conf.setMaster("local")
+    conf.setAppName("Word Count")
+    val sc = new SparkContext(conf)
+    sc.setLogLevel("ERROR")
+
+    val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+    import sqlContext.implicits._
+    val content = get("https://s3.amazonaws.com/cmucc-datasets/15619/s19/query3_ref.txt")
+    val lines: Array[String] = content.split("\\r?\\n")
+    val r = scala.util.Random
+    val ourDf = sqlContext.read.parquet("/Users/harsha/Desktop/ETLclean/data/test.pq")
+    case class record(tweet_id:String,created_at:String,user_id:String,censored_text:String,impactScore:String)
+    implicit val formats = DefaultFormats
+    var i =0
+    while(i<10) {
+      i=i+1
+      val index = r.nextInt(lines.length)
+      val jsonObject = parse(lines(index))
+      val recordObj = jsonObject.extract[record]
+      val tweetId = recordObj.tweet_id.toLong
+      val ourImpactScore = ourDf.filter($"id"===tweetId).select("imapctscore").show(false)
+      println(recordObj.impactScore)
+
+
+
+    }
+    sc.stop()
+    true
+
+  }
+
   def generateTopicWords(tweet : String) :HashMap[String,Int]={
     var freqMap: HashMap[String, Int] = HashMap()
 
@@ -78,9 +106,6 @@ object Query3ETL extends App {
     validWords.foreach(x=> {
       freqMap.put(x,freqMap.getOrElse(x, 0)+1)
     })
-    for(x<-freqMap){
-      println(x._2)
-    }
     freqMap
   }
 
@@ -136,6 +161,7 @@ object Query3ETL extends App {
     val filteredTweet = filterShortUrl(tweet)
     // Get valid  words
     val words = getSubwords(filteredTweet)
+
     // Get Stop words
     val stopWords = getStopWordsLowerCase
     var validWordCount=0

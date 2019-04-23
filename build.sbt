@@ -13,3 +13,7 @@ libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.4.0"
 libraryDependencies += "mysql" % "mysql-connector-java" % "8.0.15"
 // https://mvnrepository.com/artifact/org.apache.hbase/hbase
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
+
+// https://mvnrepository.com/artifact/net.liftweb/lift-json
+libraryDependencies += "net.liftweb" %% "lift-json" % "3.3.0"
+
